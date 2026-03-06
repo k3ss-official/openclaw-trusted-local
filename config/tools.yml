@@ -1,0 +1,206 @@
+# OpenClaw Tools Configuration
+# For: k3ss-official / M4 Mac Mini 16GB
+# Last updated: 2025
+
+# =============================================================
+# TOOL REGISTRY
+# All tools available to Rae and sub-agents
+# =============================================================
+
+tools:
+
+  # --- WEB & RESEARCH ---
+
+  web_search:
+    name: web_search
+    type: builtin
+    status: active
+    agents: [ResearchAgent, Rae]
+    description: "Search the web for current information"
+    rate_limit: 100/hour
+
+  read_url:
+    name: read_url
+    type: builtin
+    status: active
+    agents: [ResearchAgent, CodeAgent, Rae]
+    description: "Fetch and parse web page content"
+
+  scrapling:
+    name: scrapling
+    type: pip_install
+    status: install_required
+    install: "pip install scrapling"
+    agents: [ResearchAgent, DataAgent]
+    description: "Anti-detection web scraper - bypasses bot protection"
+    source: https://github.com/D4Vinci/Scrapling
+    priority: HIGH
+    notes: "From Arsenal: best Python scraper for tough sites. Use when read_url fails."
+
+  # --- SYSTEM & CODE ---
+
+  bash:
+    name: bash
+    type: builtin
+    status: active
+    agents: [CodeAgent, MonitorAgent]
+    description: "Execute shell commands on M4 Mac Mini"
+    security: "Sandbox where possible. Never rm -rf without confirmation."
+
+  file_read:
+    name: file_read
+    type: builtin
+    status: active
+    agents: [CodeAgent, DataAgent, Rae]
+    description: "Read local files"
+
+  file_write:
+    name: file_write
+    type: builtin
+    status: active
+    agents: [CodeAgent, Rae]
+    description: "Write/create local files"
+    requires_confirmation: false  # Rae can write freely unless sensitive path
+
+  python_exec:
+    name: python_exec
+    type: builtin
+    status: active
+    agents: [CodeAgent, DataAgent]
+    description: "Execute Python 3.12 code"
+    runtime: python3.12
+    hardware: arm64_m4
+
+  git:
+    name: git
+    type: system
+    status: active
+    agents: [CodeAgent, Rae]
+    description: "Git operations - commit, push, pull, branch"
+    remote: github.com/k3ss-official
+
+  # --- COMMUNICATION ---
+
+  telegram_notify:
+    name: telegram_notify
+    type: skill
+    status: install_required
+    skill_file: skills/telegram.md
+    agents: [Rae, MonitorAgent, OutreachAgent]
+    description: "Send messages/alerts to Tony via Telegram bot"
+    priority: CRITICAL
+    setup_notes: "See skills/telegram.md for bot setup instructions"
+
+  telegram_receive:
+    name: telegram_receive
+    type: skill
+    status: install_required
+    skill_file: skills/telegram.md
+    agents: [Rae]
+    description: "Receive commands from Tony via Telegram"
+    priority: CRITICAL
+
+  # --- GOOGLE WORKSPACE (Must-Have) ---
+
+  gws_gmail:
+    name: gws_gmail
+    type: skill_install
+    status: install_required
+    install: "npx @modelcontextprotocol/create-server"
+    source: https://github.com/modelcontextprotocol/servers/tree/main/src/google-workspace
+    agents: [OutreachAgent, DataAgent, Rae]
+    description: "Gmail read/write/draft/send"
+    priority: HIGH
+    notes: "Must-have from Arsenal. Enables OutreachAgent to draft emails. Requires OAuth."
+
+  gws_calendar:
+    name: gws_calendar
+    type: skill_install
+    status: install_required
+    agents: [Rae, OutreachAgent]
+    description: "Google Calendar read/write"
+    priority: MEDIUM
+
+  gws_drive:
+    name: gws_drive
+    type: skill_install
+    status: install_required
+    agents: [DataAgent, Rae]
+    description: "Google Drive file operations"
+    priority: MEDIUM
+
+  # --- SECRETS MANAGEMENT ---
+
+  onepassword:
+    name: 1password_cli
+    type: system
+    status: active
+    install: "brew install 1password-cli"
+    agents: [Rae]
+    description: "Retrieve API keys and secrets via 1Password CLI"
+    usage: "op read op://vault/item/field"
+    security: CRITICAL
+    notes: "All API keys retrieved via op CLI. NEVER hardcode keys in config files."
+
+  # --- MONITORING ---
+
+  system_check:
+    name: system_check
+    type: custom_script
+    status: planned
+    script: scripts/system_check.sh
+    agents: [MonitorAgent]
+    description: "Check CPU, RAM, disk, running processes on M4 Mini"
+    schedule: "*/15 * * * *"  # every 15 min
+
+  # --- DATA ---
+
+  csv_parse:
+    name: csv_parse
+    type: python_lib
+    status: active
+    install: "built-in with pandas"
+    agents: [DataAgent]
+    description: "Parse and analyse CSV files"
+
+# =============================================================
+# INSTALLATION QUEUE
+# Run these in order to get fully operational
+# =============================================================
+
+install_queue:
+  priority_1:
+    - tool: telegram_notify
+      cmd: "See skills/telegram.md"
+      why: "Tony-Rae primary comms - nothing works well without this"
+
+  priority_2:
+    - tool: gws_gmail
+      cmd: "See skills/gws_setup.md (TODO)"
+      why: "OutreachAgent needs this. Marked must-have."
+
+  priority_3:
+    - tool: scrapling
+      cmd: "pip install scrapling"
+      why: "ResearchAgent anti-bot scraping"
+
+  priority_4:
+    - tool: system_check
+      cmd: "Create scripts/system_check.sh"
+      why: "MonitorAgent health checks"
+
+# =============================================================
+# SECURITY RULES
+# =============================================================
+
+security:
+  never_hardcode_keys: true
+  key_source: 1password_cli
+  dangerous_commands:
+    - "rm -rf"
+    - "sudo"
+    - "chmod 777"
+    - "curl | bash"
+  dangerous_command_policy: "always_confirm_with_tony"
+  external_requests: "log_all"
+  local_only_data: ["personal", "financial", "health"]
