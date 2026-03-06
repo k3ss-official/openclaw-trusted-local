@@ -1,0 +1,171 @@
+# OpenClaw Model Configuration
+# For: k3ss-official / M4 Mac Mini 16GB
+# Last updated: 2025
+
+# =============================================================
+# PRIMARY MODELS (Active subscriptions)
+# =============================================================
+
+models:
+
+  # --- Anthropic Claude (via Claude Max subscription) ---
+  claude_sonnet:
+    provider: anthropic
+    model_id: claude-3-5-sonnet-20241022
+    alias: sonnet
+    tier: primary
+    context_window: 200000
+    cost: included_claude_max
+    use_for:
+      - orchestration
+      - complex_reasoning
+      - code_review
+      - content_creation
+      - agent_orchestration
+    temperature_defaults:
+      creative: 0.9
+      analytical: 0.3
+      code: 0.2
+
+  claude_haiku:
+    provider: anthropic
+    model_id: claude-3-5-haiku-20241022
+    alias: haiku
+    tier: primary
+    context_window: 200000
+    cost: included_claude_max
+    use_for:
+      - fast_responses
+      - monitoring
+      - simple_tasks
+      - high_volume_ops
+      - data_parsing
+    temperature_defaults:
+      default: 0.3
+
+  # --- Kimi (Moonshot AI) ---
+  kimi_128k:
+    provider: moonshot
+    model_id: moonshot-v1-128k
+    alias: kimi
+    tier: primary
+    context_window: 128000
+    cost: low_tier
+    use_for:
+      - long_document_analysis
+      - deep_research
+      - competitive_analysis
+      - reading_full_codebases
+      - market_scans
+    notes: "Best for tasks needing full document ingestion. Cost-effective."
+
+  kimi_32k:
+    provider: moonshot
+    model_id: moonshot-v1-32k
+    alias: kimi_fast
+    tier: secondary
+    context_window: 32000
+    cost: low_tier
+    use_for:
+      - medium_length_research
+      - quick_summaries
+
+# =============================================================
+# LOCAL MODELS (Ollama - M4 Mac Mini)
+# =============================================================
+
+  llama32_3b:
+    provider: ollama
+    model_id: llama3.2:3b
+    alias: local_fast
+    tier: local
+    context_window: 128000
+    cost: free
+    use_for:
+      - private_data_processing
+      - offline_tasks
+      - local_testing
+      - low_stakes_automation
+    hardware_notes: "Runs efficiently on M4 Mac Mini 16GB"
+
+  phi3_mini:
+    provider: ollama
+    model_id: phi3:mini
+    alias: local_tiny
+    tier: local
+    context_window: 4096
+    cost: free
+    use_for:
+      - ultra_fast_local
+      - edge_processing
+      - testing
+
+# =============================================================
+# ROUTING RULES
+# =============================================================
+
+routing:
+  default: claude_sonnet
+
+  rules:
+    - condition: task_type == "research" AND context_size > 50000
+      model: kimi_128k
+      reason: "Long context research"
+
+    - condition: task_type == "research" AND context_size <= 50000
+      model: kimi_32k
+      reason: "Standard research, cost-effective"
+
+    - condition: task_type == "monitoring" OR task_type == "simple"
+      model: claude_haiku
+      reason: "Speed and cost for simple ops"
+
+    - condition: task_type == "code" AND complexity == "high"
+      model: claude_sonnet
+      reason: "Best code quality"
+
+    - condition: task_type == "code" AND complexity == "low"
+      model: claude_haiku
+      reason: "Fast code for simple tasks"
+
+    - condition: data_sensitivity == "high" OR offline == true
+      model: llama32_3b
+      reason: "Private data stays local"
+
+    - condition: task_type == "content"
+      model: claude_sonnet
+      reason: "Best writing quality"
+
+# =============================================================
+# API ENDPOINTS
+# =============================================================
+
+endpoints:
+  anthropic:
+    base_url: https://api.anthropic.com
+    auth_method: api_key
+    key_source: 1password  # op read op://vault/anthropic/api_key
+
+  moonshot:
+    base_url: https://api.moonshot.cn/v1
+    auth_method: api_key
+    key_source: 1password  # op read op://vault/kimi/api_key
+
+  ollama:
+    base_url: http://localhost:11434
+    auth_method: none
+    notes: "Local only, no key needed"
+
+# =============================================================
+# COST CONTROLS
+# =============================================================
+
+cost_controls:
+  daily_token_limit: 2000000  # across all paid models
+  alert_threshold: 0.80       # alert at 80% of limit
+  alert_channel: telegram
+  fallback_on_limit: llama32_3b  # fallback to local if quota hit
+
+  monthly_budget_usd:
+    kimi: 20
+    note: "Claude Max is flat fee, unlimited"
