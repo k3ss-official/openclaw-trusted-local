@@ -1,0 +1,19 @@
+.
+├── config
+│   ├── models.yml
+│   └── tools.yml
+├── docs
+│   └── BUILD_ARSENAL.md
+├── oc-update.sh
+├── openclaw-trusted-local.patch
+├── README.md
+├── skills
+│   └── telegram.md
+├── tree.txt
+└── workspace
+    ├── AGENTS.md
+    ├── IDENTITY.md
+    ├── MEMORY.md
+    └── SOUL.md
+
+5 directories, 12 files

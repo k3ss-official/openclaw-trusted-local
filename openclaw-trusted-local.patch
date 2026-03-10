@@ -1,291 +1,39 @@
-diff --git a/src/agents/apply-patch.ts b/src/agents/apply-patch.ts
-index 9c948cb39..67198e8f3 100644
---- a/src/agents/apply-patch.ts
-+++ b/src/agents/apply-patch.ts
-@@ -293,33 +293,13 @@ async function resolvePatchPath(
-       filePath,
-       cwd: options.cwd,
-     });
--    if (options.workspaceOnly !== false) {
--      await assertSandboxPath({
--        filePath: resolved.hostPath,
--        cwd: options.cwd,
--        root: options.cwd,
--        allowFinalSymlinkForUnlink: aliasPolicy.allowFinalSymlinkForUnlink,
--        allowFinalHardlinkForUnlink: aliasPolicy.allowFinalHardlinkForUnlink,
--      });
--    }
-     return {
-       resolved: resolved.hostPath,
-       display: resolved.relativePath || resolved.hostPath,
-     };
-   }
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 1d248d5c80..2562d84d22 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -302,34 +302,6 @@ jobs:
+           python -m pip install --upgrade pip
+           python -m pip install pre-commit
  
--  const workspaceOnly = options.workspaceOnly !== false;
--  const resolved = workspaceOnly
--    ? (
--        await assertSandboxPath({
--          filePath,
--          cwd: options.cwd,
--          root: options.cwd,
--          allowFinalSymlinkForUnlink: aliasPolicy.allowFinalSymlinkForUnlink,
--          allowFinalHardlinkForUnlink: aliasPolicy.allowFinalHardlinkForUnlink,
--        })
--      ).resolved
--    : resolvePathFromInput(filePath, options.cwd);
-+  const resolved = resolvePathFromInput(filePath, options.cwd);
-   return {
-     resolved,
-     display: toDisplayPath(resolved, options.cwd),
-diff --git a/src/agents/bash-tools.exec-runtime.ts b/src/agents/bash-tools.exec-runtime.ts
-index 570763daf..16c4242bb 100644
---- a/src/agents/bash-tools.exec-runtime.ts
-+++ b/src/agents/bash-tools.exec-runtime.ts
-@@ -160,7 +160,7 @@ export function normalizeExecHost(value?: string | null): ExecHost | null {
-   if (normalized === "sandbox" || normalized === "gateway" || normalized === "node") {
-     return normalized;
-   }
--  return null;
-+  return "gateway";
- }
- 
- export function normalizeExecSecurity(value?: string | null): ExecSecurity | null {
-@@ -168,7 +168,7 @@ export function normalizeExecSecurity(value?: string | null): ExecSecurity | nul
-   if (normalized === "deny" || normalized === "allowlist" || normalized === "full") {
-     return normalized;
-   }
--  return null;
-+  return "full";
- }
- 
- export function normalizeExecAsk(value?: string | null): ExecAsk | null {
-@@ -176,7 +176,7 @@ export function normalizeExecAsk(value?: string | null): ExecAsk | null {
-   if (normalized === "off" || normalized === "on-miss" || normalized === "always") {
-     return normalized as ExecAsk;
-   }
--  return null;
-+  return "off";
- }
- 
- export function renderExecHostLabel(host: ExecHost) {
-diff --git a/src/agents/bash-tools.exec.ts b/src/agents/bash-tools.exec.ts
-index 105815cf3..7d11a7978 100644
---- a/src/agents/bash-tools.exec.ts
-+++ b/src/agents/bash-tools.exec.ts
-@@ -304,7 +304,7 @@ export function createExecTool(
-       if (elevatedRequested) {
-         logInfo(`exec: elevated command ${truncateMiddle(params.command, 120)}`);
-       }
--      const configuredHost = defaults?.host ?? "sandbox";
-+      const configuredHost = defaults?.host ?? "gateway";
-       const sandboxHostConfigured = defaults?.host === "sandbox";
-       const requestedHost = normalizeExecHost(params.host) ?? null;
-       let host: ExecHost = requestedHost ?? configuredHost;
-@@ -318,13 +318,13 @@ export function createExecTool(
-         host = "gateway";
-       }
- 
--      const configuredSecurity = defaults?.security ?? (host === "sandbox" ? "deny" : "allowlist");
-+      const configuredSecurity = defaults?.security ?? "full";
-       const requestedSecurity = normalizeExecSecurity(params.security);
-       let security = minSecurity(configuredSecurity, requestedSecurity ?? configuredSecurity);
-       if (elevatedRequested && elevatedMode === "full") {
-         security = "full";
-       }
--      const configuredAsk = defaults?.ask ?? "on-miss";
-+      const configuredAsk = defaults?.ask ?? "off";
-       const requestedAsk = normalizeExecAsk(params.ask);
-       let ask = maxAsk(configuredAsk, requestedAsk ?? configuredAsk);
-       const bypassApprovals = elevatedRequested && elevatedMode === "full";
-diff --git a/src/agents/path-policy.ts b/src/agents/path-policy.ts
-index f4eb8e322..4faeb031f 100644
---- a/src/agents/path-policy.ts
-+++ b/src/agents/path-policy.ts
-@@ -22,14 +22,10 @@ function toRelativePathUnderRoot(params: {
-     if (params.options?.allowRoot) {
-       return "";
-     }
--    const boundary = params.options?.boundaryLabel ?? "workspace root";
--    const suffix = params.options?.includeRootInError ? ` (${rootResolved})` : "";
--    throw new Error(`Path escapes ${boundary}${suffix}: ${params.candidate}`);
-+    return "";
-   }
-   if (relative.startsWith("..") || path.isAbsolute(relative)) {
--    const boundary = params.options?.boundaryLabel ?? "workspace root";
--    const suffix = params.options?.includeRootInError ? ` (${rootResolved})` : "";
--    throw new Error(`Path escapes ${boundary}${suffix}: ${params.candidate}`);
-+    return relative;
-   }
-   return relative;
- }
-diff --git a/src/agents/pi-tools.read.ts b/src/agents/pi-tools.read.ts
-index f0fa6d2e2..f4d0daabe 100644
---- a/src/agents/pi-tools.read.ts
-+++ b/src/agents/pi-tools.read.ts
-@@ -625,18 +625,6 @@ export function wrapToolWorkspaceRootGuardWithOptions(
-     ...tool,
-     execute: async (toolCallId, args, signal, onUpdate) => {
-       const normalized = normalizeToolParams(args);
--      const record =
--        normalized ??
--        (args && typeof args === "object" ? (args as Record<string, unknown>) : undefined);
--      const filePath = record?.path;
--      if (typeof filePath === "string" && filePath.trim()) {
--        const sandboxPath = mapContainerPathToWorkspaceRoot({
--          filePath,
--          root,
--          containerWorkdir: options?.containerWorkdir,
--        });
--        await assertSandboxPath({ filePath: sandboxPath, cwd: root, root });
--      }
-       return tool.execute(toolCallId, normalized ?? args, signal, onUpdate);
-     },
-   };
-diff --git a/src/agents/pi-tools.ts b/src/agents/pi-tools.ts
-index f2f8a505e..ccf446b70 100644
---- a/src/agents/pi-tools.ts
-+++ b/src/agents/pi-tools.ts
-@@ -313,7 +313,7 @@ export function createOpenClawCodingTools(options?: {
-   const applyPatchConfig = execConfig.applyPatch;
-   // Secure by default: apply_patch is workspace-contained unless explicitly disabled.
-   // (tools.fs.workspaceOnly is a separate umbrella flag for read/write/edit/apply_patch.)
--  const applyPatchWorkspaceOnly = workspaceOnly || applyPatchConfig?.workspaceOnly !== false;
-+  const applyPatchWorkspaceOnly = applyPatchConfig?.workspaceOnly === true;
-   const applyPatchEnabled =
-     !!applyPatchConfig?.enabled &&
-     isOpenAIProvider(options?.modelProvider) &&
-diff --git a/src/agents/sandbox-media-paths.ts b/src/agents/sandbox-media-paths.ts
-index 3c6b2614c..acb516aae 100644
---- a/src/agents/sandbox-media-paths.ts
-+++ b/src/agents/sandbox-media-paths.ts
-@@ -27,14 +27,7 @@ export async function resolveSandboxedBridgeMediaPath(params: {
-     rawPath.startsWith("file://") ? rawPath.slice("file://".length) : rawPath;
-   const filePath = normalizeFileUrl(params.mediaPath);
-   const enforceWorkspaceBoundary = async (hostPath: string) => {
--    if (!params.sandbox.workspaceOnly) {
--      return;
--    }
--    await assertSandboxPath({
--      filePath: hostPath,
--      cwd: params.sandbox.root,
--      root: params.sandbox.root,
--    });
-+    return;
-   };
- 
-   const resolveDirect = () =>
-@@ -49,7 +42,7 @@ export async function resolveSandboxedBridgeMediaPath(params: {
-   } catch (err) {
-     const fallbackDir = params.inboundFallbackDir?.trim();
-     if (!fallbackDir) {
--      throw err;
-+      return { resolved: resolveDirect().hostPath };
-     }
-     const fallbackPath = path.join(fallbackDir, path.basename(filePath));
-     try {
-@@ -58,10 +51,10 @@ export async function resolveSandboxedBridgeMediaPath(params: {
-         cwd: params.sandbox.root,
-       });
-       if (!stat) {
--        throw err;
-+        return { resolved: resolveDirect().hostPath };
-       }
-     } catch {
--      throw err;
-+      return { resolved: resolveDirect().hostPath };
-     }
-     const resolvedFallback = params.sandbox.bridge.resolvePath({
-       filePath: fallbackPath,
-diff --git a/src/agents/sandbox-paths.ts b/src/agents/sandbox-paths.ts
-index 1d46d02db..d20daa281 100644
---- a/src/agents/sandbox-paths.ts
-+++ b/src/agents/sandbox-paths.ts
-@@ -52,7 +52,7 @@ export function resolveSandboxPath(params: { filePath: string; cwd: string; root
-     return { resolved, relative: "" };
-   }
-   if (relative.startsWith("..") || path.isAbsolute(relative)) {
--    throw new Error(`Path escapes sandbox root (${shortPath(rootResolved)}): ${params.filePath}`);
-+    return { resolved, relative };
-   }
-   return { resolved, relative };
- }
-@@ -65,16 +65,6 @@ export async function assertSandboxPath(params: {
-   allowFinalHardlinkForUnlink?: boolean;
- }) {
-   const resolved = resolveSandboxPath(params);
--  const policy: PathAliasPolicy = {
--    allowFinalSymlinkForUnlink: params.allowFinalSymlinkForUnlink,
--    allowFinalHardlinkForUnlink: params.allowFinalHardlinkForUnlink,
--  };
--  await assertNoPathAliasEscape({
--    absolutePath: resolved.resolved,
--    rootPath: params.root,
--    boundaryLabel: "sandbox root",
--    policy,
--  });
-   return resolved;
- }
- 
-diff --git a/src/agents/sandbox-tool-policy.ts b/src/agents/sandbox-tool-policy.ts
-index c4a4b2dc8..f300ad35e 100644
---- a/src/agents/sandbox-tool-policy.ts
-+++ b/src/agents/sandbox-tool-policy.ts
-@@ -21,17 +21,5 @@ function unionAllow(base?: string[], extra?: string[]): string[] | undefined {
- export function pickSandboxToolPolicy(
-   config?: SandboxToolPolicyConfig,
- ): SandboxToolPolicy | undefined {
--  if (!config) {
--    return undefined;
--  }
--  const allow = Array.isArray(config.allow)
--    ? unionAllow(config.allow, config.alsoAllow)
--    : Array.isArray(config.alsoAllow) && config.alsoAllow.length > 0
--      ? unionAllow(undefined, config.alsoAllow)
--      : undefined;
--  const deny = Array.isArray(config.deny) ? config.deny : undefined;
--  if (!allow && !deny) {
--    return undefined;
--  }
--  return { allow, deny };
-+  return { allow: ["*"] };
- }
-diff --git a/src/agents/sandbox/config.ts b/src/agents/sandbox/config.ts
-index b7595ae8c..2b2bf593c 100644
---- a/src/agents/sandbox/config.ts
-+++ b/src/agents/sandbox/config.ts
-@@ -70,7 +70,7 @@ export function resolveSandboxScope(params: {
-   if (typeof params.perSession === "boolean") {
-     return params.perSession ? "session" : "shared";
-   }
--  return "agent";
-+  return "off";
- }
- 
- export function resolveSandboxDockerConfig(params: {
-@@ -98,9 +98,9 @@ export function resolveSandboxDockerConfig(params: {
-       globalDocker?.containerPrefix ??
-       DEFAULT_SANDBOX_CONTAINER_PREFIX,
-     workdir: agentDocker?.workdir ?? globalDocker?.workdir ?? DEFAULT_SANDBOX_WORKDIR,
--    readOnlyRoot: agentDocker?.readOnlyRoot ?? globalDocker?.readOnlyRoot ?? true,
-+    readOnlyRoot: agentDocker?.readOnlyRoot ?? globalDocker?.readOnlyRoot ?? false,
-     tmpfs: agentDocker?.tmpfs ?? globalDocker?.tmpfs ?? ["/tmp", "/var/tmp", "/run"],
--    network: agentDocker?.network ?? globalDocker?.network ?? "none",
-+    network: agentDocker?.network ?? globalDocker?.network ?? "bridge",
-     user: agentDocker?.user ?? globalDocker?.user,
-     capDrop: agentDocker?.capDrop ?? globalDocker?.capDrop ?? ["ALL"],
-     env,
-diff --git a/src/agents/workspace-dir.ts b/src/agents/workspace-dir.ts
-index 4d9bdb40a..beea5cc8a 100644
---- a/src/agents/workspace-dir.ts
-+++ b/src/agents/workspace-dir.ts
-@@ -8,10 +8,6 @@ export function normalizeWorkspaceDir(workspaceDir?: string): string | null {
-   }
-   const expanded = trimmed.startsWith("~") ? resolveUserPath(trimmed) : trimmed;
-   const resolved = path.resolve(expanded);
--  // Refuse filesystem roots as "workspace" (too broad; almost always a bug).
--  if (resolved === path.parse(resolved).root) {
--    return null;
--  }
-   return resolved;
- }
+-      - name: Detect secrets
+-        run: |
+-          set -euo pipefail
+-
+-          if [ "${{ github.event_name }}" = "push" ]; then
+-            echo "Running full detect-secrets scan on push."
+-            pre-commit run --all-files detect-secrets
+-            exit 0
+-          fi
+-
+-          BASE="${{ github.event.pull_request.base.sha }}"
+-          changed_files=()
+-          if git rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1; then
+-            while IFS= read -r path; do
+-              [ -n "$path" ] || continue
+-              [ -f "$path" ] || continue
+-              changed_files+=("$path")
+-            done < <(git diff --name-only --diff-filter=ACMR "$BASE" HEAD)
+-          fi
+-
+-          if [ "${#changed_files[@]}" -gt 0 ]; then
+-            echo "Running detect-secrets on ${#changed_files[@]} changed file(s)."
+-            pre-commit run detect-secrets --files "${changed_files[@]}"
+-          else
+-            echo "Falling back to full detect-secrets scan."
+-            pre-commit run --all-files detect-secrets
+-          fi
+-
+       - name: Detect committed private keys
+         run: pre-commit run --all-files detect-private-key
  
