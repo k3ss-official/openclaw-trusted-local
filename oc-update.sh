@@ -203,7 +203,7 @@ start_spinner "Waiting for gateway health OK"
 HEALTH_OK=false
 for i in {1..15}; do
     set +e
-    openclaw health >/dev/null 2>&1
+    OPENCLAW_STATE_DIR=/Volumes/openclaw/.openclaw OPENCLAW_CONFIG_PATH=/Volumes/openclaw/.openclaw/openclaw.json openclaw health >/dev/null 2>&1
     HEALTH_STATUS=$?
     set -e
     if [ $HEALTH_STATUS -eq 0 ]; then
