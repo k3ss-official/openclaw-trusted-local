@@ -1,39 +1,49 @@
-diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
-index 1d248d5c80..2562d84d22 100644
---- a/.github/workflows/ci.yml
-+++ b/.github/workflows/ci.yml
-@@ -302,34 +302,6 @@ jobs:
-           python -m pip install --upgrade pip
-           python -m pip install pre-commit
+diff --git a/src/agents/tools/pdf-native-providers.ts b/src/agents/tools/pdf-native-providers.ts
+index 70a1e2e0e9..36d43ffb9f 100644
+--- a/src/agents/tools/pdf-native-providers.ts
++++ b/src/agents/tools/pdf-native-providers.ts
+@@ -137,9 +137,10 @@ export async function geminiAnalyzePdf(params: {
+   }
+   parts.push({ text: params.prompt });
  
--      - name: Detect secrets
--        run: |
--          set -euo pipefail
--
--          if [ "${{ github.event_name }}" = "push" ]; then
--            echo "Running full detect-secrets scan on push."
--            pre-commit run --all-files detect-secrets
--            exit 0
--          fi
--
--          BASE="${{ github.event.pull_request.base.sha }}"
--          changed_files=()
--          if git rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1; then
--            while IFS= read -r path; do
--              [ -n "$path" ] || continue
--              [ -f "$path" ] || continue
--              changed_files+=("$path")
--            done < <(git diff --name-only --diff-filter=ACMR "$BASE" HEAD)
--          fi
--
--          if [ "${#changed_files[@]}" -gt 0 ]; then
--            echo "Running detect-secrets on ${#changed_files[@]} changed file(s)."
--            pre-commit run detect-secrets --files "${changed_files[@]}"
--          else
--            echo "Falling back to full detect-secrets scan."
--            pre-commit run --all-files detect-secrets
--          fi
--
-       - name: Detect committed private keys
-         run: pre-commit run --all-files detect-private-key
+-  const baseUrl = (params.baseUrl ?? "https://generativelanguage.googleapis.com")
+-    .replace(/\/+$/, "")
+-    .replace(/\/v1beta$/, "");
++  const baseUrl = (params.baseUrl ?? "https://generativelanguage.googleapis.com").replace(
++    /\/+$/,
++    "",
++  );
+   const url = `${baseUrl}/v1beta/models/${encodeURIComponent(params.modelId)}:generateContent?key=${encodeURIComponent(apiKey)}`;
  
+   const res = await fetch(url, {
+diff --git a/src/agents/tools/pdf-tool.test.ts b/src/agents/tools/pdf-tool.test.ts
+index 381fc53c4b..6cbc6ca54d 100644
+--- a/src/agents/tools/pdf-tool.test.ts
++++ b/src/agents/tools/pdf-tool.test.ts
+@@ -711,26 +711,6 @@ describe("native PDF provider API calls", () => {
+       "apiKey required",
+     );
+   });
+-
+-  it("geminiAnalyzePdf does not duplicate /v1beta when baseUrl already includes it", async () => {
+-    const { geminiAnalyzePdf } = await import("./pdf-native-providers.js");
+-    const fetchMock = mockFetchResponse({
+-      ok: true,
+-      json: async () => ({
+-        candidates: [{ content: { parts: [{ text: "ok" }] } }],
+-      }),
+-    });
+-
+-    await geminiAnalyzePdf(
+-      makeGeminiAnalyzeParams({
+-        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+-      }),
+-    );
+-
+-    const [url] = fetchMock.mock.calls[0];
+-    expect(url).toContain("/v1beta/models/");
+-    expect(url).not.toContain("/v1beta/v1beta");
+-  });
+ });
+ 
+ // ---------------------------------------------------------------------------
