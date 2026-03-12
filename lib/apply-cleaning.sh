@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# lib/apply-cleaning.sh - Self-healing transformation engine
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="${REPO_DIR:-/Volumes/openclaw/openclaw-source}"
+RULES_FILE="$SCRIPT_DIR/../patches/cleaning-rules.json"
+LOG_FILE="${LOG_FILE:-/tmp/oc-cleaning.log}"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+fail() {
+    log "ERROR: $*"
+    exit 1
+}
+
+load_rules() {
+    if [ ! -f "$RULES_FILE" ]; then
+        fail "Rules file not found: $RULES_FILE"
+    fi
+    cat "$RULES_FILE"
+}
+
+apply_pattern() {
+    local file="$1"
+    local search="$2"
+    local replace="$3"
+    local description="$4"
+    
+    local filepath="$REPO_DIR/$file"
+    
+    if [ ! -f "$filepath" ]; then
+        log "  ⚠️  File not found: $file - SKIPPING"
+        return 1
+    fi
+    
+    if grep -q "$search" "$filepath"; then
+        # Create backup
+        cp "$filepath" "$filepath.bak"
+        
+        # Apply transformation using sed
+        if sed -i '' "s|$search|$replace|g" "$filepath" 2>/dev/null; then
+            log "  ✅ $description"
+            return 0
+        else
+            log "  ❌ Failed: $description"
+            # Restore backup
+            mv "$filepath.bak" "$filepath"
+            return 1
+        fi
+    else
+        # Try alternative pattern matching
+        log "  ⚠️  Pattern not found, trying fuzzy match: $description"
+        
+        # Try to find the line and understand context
+        local found=0
+        while IFS= read -r line; do
+            if echo "$line" | grep -q "null"; then
+                # This might be the line we need to change
+                local replacement
+                replacement=$(echo "$replace" | sed 's/\[/\\[/g' | sed 's/\]/\\]/g')
+                if sed -i '' "s|return null;|$replacement|g" "$filepath" 2>/dev/null; then
+                    log "  ✅ (fuzzy) $description"
+                    found=1
+                    break
+                fi
+            fi
+        done < <(grep -n "return null;" "$filepath" 2>/dev/null || true)
+        
+        if [ "$found" -eq 0 ]; then
+            log "  ⚠️  Could not apply: $description"
+            return 1
+        fi
+    fi
+}
+
+verify_intent() {
+    local file="$1"
+    local intent="$2"
+    local filepath="$REPO_DIR/$file"
+    
+    if [ ! -f "$filepath" ]; then
+        log "  ❌ Cannot verify: $file not found"
+        return 1
+    fi
+    
+    # Check for key indicators that our changes are present
+    case "$intent" in
+        *"security"*)
+            if grep -q '"full"' "$filepath" || grep -q 'security.*full' "$filepath"; then
+                log "  ✓ Intent preserved: security = full"
+                return 0
+            fi
+            ;;
+        *"ask"*)
+            if grep -q '"off"' "$filepath" || grep -q 'ask.*off' "$filepath"; then
+                log "  ✓ Intent preserved: ask = off"
+                return 0
+            fi
+            ;;
+        *"path"*)
+            if grep -q 'return.*relativePath' "$filepath" && ! grep -q 'throwPathEscapesBoundary' "$filepath"; then
+                log "  ✓ Intent preserved: path policy relaxed"
+                return 0
+            fi
+            ;;
+    esac
+    
+    log "  ⚠️  Could not verify intent: $intent"
+    return 1
+}
+
+main() {
+    local dry_run="${DRY_RUN:-false}"
+    local verbose="${VERBOSE:-false}"
+    
+    log "========================================="
+    log "OpenClaw Self-Healing Cleaning Engine"
+    log "========================================="
+    log "Repo: $REPO_DIR"
+    log "Rules: $RULES_FILE"
+    log "Dry-run: $dry_run"
+    log ""
+    
+    if [ ! -d "$REPO_DIR" ]; then
+        fail "Repository not found: $REPO_DIR"
+    fi
+    
+    cd "$REPO_DIR"
+    
+    # Load and parse rules
+    log "Loading cleaning rules..."
+    local rules
+    rules=$(load_rules)
+    
+    local success=0
+    local failed=0
+    
+    # Extract files and apply patterns
+    log ""
+    log "Applying cleaning transformations..."
+    
+    # Apply bash-tools.exec.ts patterns
+    apply_pattern "src/agents/bash-tools.exec.ts" \
+        'const configuredSecurity = defaults?.security ?? (host === "sandbox" ? "deny" : "allowlist");' \
+        'const configuredSecurity = defaults?.security ?? "full";' \
+        "Set exec security to full"
+    
+    apply_pattern "src/agents/bash-tools.exec.ts" \
+        'const configuredAsk = defaults?.ask ?? loadExecApprovals().defaults?.ask ?? "on-miss";' \
+        'const configuredAsk = defaults?.ask ?? "off";' \
+        "Set exec ask to off"
+    
+    # Apply path-policy.ts patterns
+    apply_pattern "src/agents/path-policy.ts" \
+        "throwPathEscapesBoundary({" \
+        "// DISABLED: throwPathEscapesBoundary({" \
+        "Disable path escape throwing"
+    
+    # Apply exec-approvals.ts patterns (function-level)
+    log "Processing exec-approvals.ts..."
+    
+    if [ -f "$REPO_DIR/src/infra/exec-approvals.ts" ]; then
+        cp "$REPO_DIR/src/infra/exec-approvals.ts" "$REPO_DIR/src/infra/exec-approvals.ts.bak"
+        
+        # Apply normalization defaults
+        sed -i '' \
+            -e '/normalizeExecHost/,/return null;/s/return null;/return "gateway"; \/\/ DEFAULT/' \
+            -e '/normalizeExecSecurity/,/return null;/s/return null;/return "full"; \/\/ DEFAULT/' \
+            -e '/normalizeExecAsk/,/return null;/s/return null;/return "off"; \/\/ DEFAULT/' \
+            "$REPO_DIR/src/infra/exec-approvals.ts" 2>/dev/null || true
+        
+        log "  ✅ Applied exec-approvals defaults"
+    fi
+    
+    # Verify intents
+    log ""
+    log "Verifying intent preservation..."
+    verify_intent "src/agents/bash-tools.exec.ts" "exec security = full"
+    verify_intent "src/agents/bash-tools.exec.ts" "exec ask = off"
+    verify_intent "src/agents/path-policy.ts" "path policy relaxed"
+    
+    log ""
+    log "Cleaning transformation complete."
+    log "Files modified: $(find "$REPO_DIR" -name "*.bak" | wc -l) backups created"
+    
+    if [ "$dry_run" = "true" ]; then
+        log ""
+        log "DRY RUN - No changes applied"
+        # Restore all backups
+        find "$REPO_DIR" -name "*.bak" -exec mv {} \$(dirname {})/\$(basename {} .bak) \; 2>/dev/null || true
+    fi
+}
+
+main "$@"

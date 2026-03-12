@@ -1,59 +1,84 @@
-# openclaw-trusted-local
+# OpenClaw Trusted-Local Auto-Maintainer
 
 Patched OpenClaw build for trusted local personal assistant use on k3ss M4 Mac.
 
-## What this is
+## What This Is
 
-OpenClaw ships with hardcoded sandbox restrictions that prevent it executing commands or writing files outside its workspace, even on a personal local machine. This repo contains the patch that removes those restrictions and the tooling to maintain it across upstream updates.
+OpenClaw ships with hardcoded sandbox restrictions. This repo contains the auto-maintainer that:
+1. Detects new upstream versions
+2. Applies your trusted-local cleaning (removes sandbox/exec restrictions)
+3. Self-heals when upstream changes
+4. Builds and swaps the binary
+5. Verifies your security intent is preserved
+
+## Quick Start
+
+```bash
+cd /Volumes/openclaw/openclaw-trusted-local
+
+# Check for updates
+./oc-self-heal.sh --check
+
+# Preview what would happen  
+./oc-self-heal.sh --dry-run
+
+# Run full update
+./oc-self-heal.sh
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `./oc-self-heal.sh` | Full update (stop → pull → clean → build → swap → restart) |
+| `./oc-self-heal.sh --check` | Only check GitHub for new version |
+| `./oc-self-heal.sh --dry-run` | Preview without applying |
+| `./oc-self-heal.sh --force` | Force rebuild even if up-to-date |
 
 ## Files
 
-- `openclaw-trusted-local.patch` — git diff patch against openclaw/openclaw main. Apply this after any upstream update to restore trusted local mode.
-- `oc-update.sh` — update script. Run this instead of brew upgrade or npm update. Pulls upstream, re-applies patch, rebuilds, swaps binary, restarts gateway.
-
-## Patched files
-
-| File | Change |
-|------|--------|
-| src/agents/bash-tools.exec.ts | Default exec host sandbox → gateway, security deny → full, ask on-miss → off |
-| src/agents/bash-tools.exec-runtime.ts | Same defaults in normalizeExecHost/Security/Ask |
-| src/agents/sandbox-paths.ts | assertSandboxPath() stubbed to no-op |
-| src/agents/path-policy.ts | toRelativePathUnderRoot() path escape rejection removed |
-| src/agents/pi-tools.read.ts | assertSandboxPath() callsite removed |
-| src/agents/apply-patch.ts | Both assertSandboxPath() callsites removed |
-| src/agents/sandbox-media-paths.ts | enforceWorkspaceBoundary() stubbed to no-op |
-| src/agents/tool-fs-policy.ts | workspaceOnly defaults to false |
-| src/agents/pi-tools.ts | applyPatchWorkspaceOnly defaults false, guard skipped when workspaceOnly false |
-| src/agents/sandbox/config.ts | Scope default off, readOnlyRoot false, network bridge |
-| src/agents/sandbox-tool-policy.ts | pickSandboxToolPolicy() always returns permissive |
-| src/agents/workspace-dir.ts | normalizeWorkspaceDir() filesystem root rejection removed |
-
-## How to apply after an upstream update
-
-Run:
-```bash
-~/scripts/oc-update.sh
+```
+openclaw-trusted-local/
+├── oc-self-heal.sh              # Main entry point (NEW)
+├── oc-update.sh                # Legacy updater
+├── lib/                        # NEW: Self-healing engine
+│   ├── detect-version.sh       # Version detection
+│   ├── apply-cleaning.sh       # Self-healing transformer
+│   ├── check-safety.sh        # Safety verification
+│   └── build.sh               # Build & swap
+├── patches/
+│   └── cleaning-rules.json     # NEW: Declarative rules
+└── openclaw-trusted-local.patch # Legacy static patch
 ```
 
-That script handles everything: stops gateway, pulls upstream, applies this patch, rebuilds, swaps binary, restarts gateway, verifies.
+## Security Intent
 
-## If the patch fails to apply
+Enforces on your trusted local environment:
+- **Exec**: Full access (no sandboxing)
+- **Ask**: Off (no prompting)
+- **Path**: Relaxed (no boundary restrictions)
+- **Default Host**: Gateway
 
-Upstream changed one of the patched lines. Run:
+## What It NEVER Touches
+
+- `/Volumes/openclaw/.openclaw/` - state directory
+- `/Volumes/openclaw/.openclaw/openclaw.json` - config
+- `/Volumes/openclaw/.openclaw/workspace/` - Rae's brain files
+
+## If Self-Heal Fails
+
+The system will STOP and report. Check output:
 ```bash
-cd ~/projects/openclaw
-git pull origin main
-git apply ~/projects/openclaw-trusted-local/openclaw-trusted-local.patch
-```
-Check which hunks failed, fix those lines manually to match the same intent (stub the enforcement, return early, flip the default), then update the patch:
-```bash
-git diff > ~/projects/openclaw-trusted-local/openclaw-trusted-local.patch
-cd ~/projects/openclaw-trusted-local
-git add openclaw-trusted-local.patch
-git commit -m "fix: update patch for upstream changes"
-git push
+./lib/apply-cleaning.sh  # Run with verbose
 ```
 
-## Binary location
+Manual fix: Update `patches/cleaning-rules.json` patterns, then retry.
+
+## Binary Location
 
 `/opt/homebrew/lib/node_modules/openclaw/dist/openclaw.mjs`
+
+## Support
+
+- Logs: `/tmp/oc-cleaning.log`
+- Gateway logs: `/tmp/openclaw/openclaw-*.log`

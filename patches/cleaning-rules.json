@@ -1,0 +1,62 @@
+{
+  "version": "1.0.0",
+  "description": "Declarative cleaning rules for OpenClaw trusted-local",
+  "rules": [
+    {
+      "file": "src/agents/bash-tools.exec.ts",
+      "intent": "Set exec security to full, ask to off",
+      "patterns": [
+        {
+          "search": "const configuredSecurity = defaults?.security ?? (host === \"sandbox\" ? \"deny\" : \"allowlist\");",
+          "replace": "const configuredSecurity = defaults?.security ?? \"full\";",
+          "description": "Set default security to full"
+        },
+        {
+          "search": "const configuredAsk = defaults?.ask ?? loadExecApprovals().defaults?.ask ?? \"on-miss\";",
+          "replace": "const configuredAsk = defaults?.ask ?? \"off\";",
+          "description": "Set default ask to off"
+        }
+      ]
+    },
+    {
+      "file": "src/agents/path-policy.ts",
+      "intent": "Relax path boundary restrictions",
+      "patterns": [
+        {
+          "search": "throwPathEscapesBoundary({",
+          "replace": "return \"\"; // DISABLED: throwPathEscapesBoundary({",
+          "description": "Disable path escape throwing"
+        },
+        {
+          "search": "return params.relativePath;",
+          "replace": "return params.relativePath; // ALLOW ALL",
+          "description": "Allow relative paths"
+        }
+      ]
+    },
+    {
+      "file": "src/infra/exec-approvals.ts",
+      "intent": "Set default normalization to gateway/full/off",
+      "patterns": [
+        {
+          "search": "return null;",
+          "replace": "return \"gateway\"; // DEFAULT",
+          "after": "export function normalizeExecHost",
+          "description": "Default exec host to gateway"
+        },
+        {
+          "search": "return null;",
+          "replace": "return \"full\"; // DEFAULT",
+          "after": "export function normalizeExecSecurity",
+          "description": "Default security to full"
+        },
+        {
+          "search": "return null;",
+          "replace": "return \"off\"; // DEFAULT",
+          "after": "export function normalizeExecAsk",
+          "description": "Default ask to off"
+        }
+      ]
+    }
+  ]
+}
