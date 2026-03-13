@@ -72,6 +72,13 @@ main() {
     if ! cp -R dist/* "$DEST_DIR/"; then
         fail "Failed to copy binaries"
     fi
+    
+    # Also swap package.json to update version info
+    log "Updating package.json..."
+    if ! cp package.json "$DEST_DIR/../package.json"; then
+        fail "Failed to copy package.json"
+    fi
+    
     log "  ✅ Binaries swapped to $DEST_DIR"
     
     echo ""
