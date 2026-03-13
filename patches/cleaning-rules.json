@@ -1,7 +1,18 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Declarative cleaning rules for OpenClaw trusted-local",
   "rules": [
+    {
+      "file": "src/infra/tmp-openclaw-dir.ts",
+      "intent": "Allow OPENCLAW_TMP_DIR env var override for external volume installs",
+      "patterns": [
+        {
+          "search": "export function resolvePreferredOpenClawTmpDir(\n  options: ResolvePreferredOpenClawTmpDirOptions = {},\n): string {",
+          "replace": "export function resolvePreferredOpenClawTmpDir(\n  options: ResolvePreferredOpenClawTmpDirOptions = {},\n): string {\n  // Allow explicit override via environment variable\n  const explicitTmpDir = process.env.OPENCLAW_TMP_DIR;\n  if (explicitTmpDir) {\n    const resolved = path.resolve(explicitTmpDir);\n    try {\n      const st = fs.lstatSync(resolved);\n      if (st.isDirectory() && !st.isSymbolicLink()) {\n        fs.accessSync(resolved, TMP_DIR_ACCESS_MODE);\n        return resolved;\n      }\n    } catch (err) {\n      if (!isNodeErrorWithCode(err, \"ENOENT\")) {\n        // Fall through to default behavior\n      } else {\n        try {\n          fs.mkdirSync(resolved, { recursive: true, mode: 0o700 });\n          return resolved;\n        } catch {\n          // Fall through to default behavior\n        }\n      }\n    }\n  }\n\n  const accessSync = options.accessSync ?? fs.accessSync;",
+          "description": "Add OPENCLAW_TMP_DIR env var support"
+        }
+      ]
+    },
     {
       "file": "src/agents/bash-tools.exec.ts",
       "intent": "Set exec security to full, ask to off",
