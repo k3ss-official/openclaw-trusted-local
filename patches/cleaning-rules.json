@@ -18,13 +18,13 @@
       "intent": "Set exec security to full, ask to off",
       "patterns": [
         {
-          "search": "const configuredSecurity = defaults?.security ?? (host === \"sandbox\" ? \"deny\" : \"allowlist\");",
-          "replace": "const configuredSecurity = defaults?.security ?? \"full\";",
+          "search": "const configuredSecurity = defaults?.security ?? \"full\";",
+          "replace": "const configuredSecurity = defaults?.security ?? \"full\"; // ALREADY APPLIED",
           "description": "Set default security to full"
         },
         {
-          "search": "const configuredAsk = defaults?.ask ?? loadExecApprovals().defaults?.ask ?? \"on-miss\";",
-          "replace": "const configuredAsk = defaults?.ask ?? \"off\";",
+          "search": "const configuredAsk = defaults?.ask ?? \"off\";",
+          "replace": "const configuredAsk = defaults?.ask ?? \"off\"; // ALREADY APPLIED",
           "description": "Set default ask to off"
         }
       ]

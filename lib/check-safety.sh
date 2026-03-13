@@ -69,19 +69,19 @@ check_exec_defaults() {
     local checks=0
     local passed=0
     
-    if grep -q 'normalizeExecHost.*return "gateway"' "$file" || grep -q '"gateway"' "$file"; then
+    if grep -q 'return "gateway"; // DEFAULT' "$file" || grep -q '"gateway"' "$file"; then
         log "  ✅ Host defaults to gateway"
         ((passed++))
     fi
     ((checks++))
     
-    if grep -q 'normalizeExecSecurity.*return "full"' "$file" || grep -q 'security.*full' "$file"; then
+    if grep -q 'return "full"; // DEFAULT' "$file" || grep -q 'security.*full' "$file"; then
         log "  ✅ Security defaults to full"
         ((passed++))
     fi
     ((checks++))
     
-    if grep -q 'normalizeExecAsk.*return "off"' "$file" || grep -q 'ask.*off' "$file"; then
+    if grep -q 'return "off"; // DEFAULT' "$file" || grep -q 'ask.*off' "$file"; then
         log "  ✅ Ask defaults to off"
         ((passed++))
     fi
