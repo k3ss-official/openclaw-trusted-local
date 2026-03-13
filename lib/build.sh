@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # lib/build.sh - Build and swap OpenClaw binary
+# Can be sourced OR run directly
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Only set SCRIPT_DIR if not already set (may be sourced from parent)
+if [ -z "${SCRIPT_DIR:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 REPO_DIR="${REPO_DIR:-/Volumes/openclaw/openclaw-source}"
 DEST_DIR="/opt/homebrew/lib/node_modules/openclaw/dist"
 
@@ -75,4 +79,7 @@ main() {
     echo "   Run 'openclaw gateway restart' to use new version"
 }
 
-main "$@"
+# Only run main if executed directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

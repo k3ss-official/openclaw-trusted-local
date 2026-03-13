@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # lib/apply-cleaning.sh - Self-healing transformation engine
+# Can be sourced OR run directly
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Only set SCRIPT_DIR if not already set (may be sourced from parent)
+if [ -z "${SCRIPT_DIR:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 REPO_DIR="${REPO_DIR:-/Volumes/openclaw/openclaw-source}"
 RULES_FILE="$SCRIPT_DIR/../patches/cleaning-rules.json"
 LOG_FILE="${LOG_FILE:-/tmp/oc-cleaning.log}"
@@ -190,8 +194,11 @@ main() {
         log ""
         log "DRY RUN - No changes applied"
         # Restore all backups
-        find "$REPO_DIR" -name "*.bak" -exec mv {} \$(dirname {})/\$(basename {} .bak) \; 2>/dev/null || true
+        find "$REPO_DIR" -name "*.bak" -exec mv {} $(dirname {})/$(basename {} .bak) \; 2>/dev/null || true
     fi
 }
 
-main "$@"
+# Only run main if executed directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

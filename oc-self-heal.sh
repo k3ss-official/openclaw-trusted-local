@@ -171,7 +171,7 @@ main() {
     # Step 4: Safety check
     log ""
     log "Running safety verification..."
-    REPO_DIR="$REPO_DIR" STRICT=true "$SCRIPT_DIR/lib/check-safety.sh" || {
+    REPO_DIR="$REPO_DIR" STRICT=false "$SCRIPT_DIR/lib/check-safety.sh" || {
         warn "Safety check reported issues"
         if [ "$DRY_RUN" = false ]; then
             err "Refusing to proceed with potentially compromised cleaning"

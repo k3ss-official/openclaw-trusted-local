@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # lib/check-safety.sh - Verify cleaning intent is preserved
+# Can be sourced OR run directly
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Only set SCRIPT_DIR if not already set (may be sourced from parent)
+if [ -z "${SCRIPT_DIR:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 REPO_DIR="${REPO_DIR:-/Volumes/openclaw/openclaw-source}"
 
 log() {
@@ -133,4 +137,7 @@ main() {
     fi
 }
 
-main "$@"
+# Only run main if executed directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
